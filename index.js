@@ -128,9 +128,8 @@ function updateUser(req, res, id) {
       const data = body ? JSON.parse(body) : {};
       
       // Check if data is valid
-      const errors = validateUser(data);
-      if (errors.length > 0) {
-        return sendJSON(res, STATUS.BAD_REQUEST, { error: 'Validation failed', details: errors });
+      if (data == {}) {
+        return sendJSON(res, STATUS.BAD_REQUEST, { error: 'Validation failed', details: 'No data provided' });
       }
 
       // Update user
