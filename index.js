@@ -31,7 +31,8 @@ function sendJSON(res, statusCode, data) {
     
     if (!user.email) {
       errors.push('Email is required');
-    } else if (!(typeof user["email"] === 'string' && user["email"].includes('@'))) {
+      
+    } else if (!(typeof user.email === 'string' && user.email.includes('@'))) {
       errors.push('Email is not valid');
     }
     
