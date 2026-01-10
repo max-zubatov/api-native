@@ -204,7 +204,7 @@ function handleRequest(req, res) {
   }
   
   // No route matched
-  sendJSON(res, STATUS.NOT_FOUND, { error: 'Route not found' });
+  sendJSON(res, STATUS.NOT_FOUND, { error: 'Route is not found' });
 }
 
 // Create and start the server
