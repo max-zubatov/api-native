@@ -31,7 +31,7 @@ function sendJSON(res, statusCode, data) {
     
     if (!user.email) {
       errors.push('Email is required');
-      
+
     } else if (!(typeof user.email === 'string' && user.email.includes('@'))) {
       errors.push('Email is not valid');
     }
@@ -134,11 +134,16 @@ function updateUser(req, res, id) {
       }
 
       // Update user
-      user.name = data.name.trim();
-      user.email = data.email.toLowerCase();
-      user.age = data.age;
+      if (data.name) {
+        user.name = data.name.trim();
+      }
+      if (data.email) {
+        user.email = data.email.toLowerCase();
+      }
+      if (data.age) {
+        user.age = data.age;
+      }
       user.updatedAt = new Date().toISOString();
-
       // Send back the updated user
       sendJSON(res, STATUS.OK, user);
     });
