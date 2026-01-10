@@ -14,20 +14,6 @@ const STATUS = {
   INTERNAL_SERVER_ERROR: 500
 };
 
-//STEP 1: START SERVER
-// Create a basic request handler
-function requestHandler(req, res) {
-  console.log(`${req.method} ${req.url}`);
-  res.end(JSON.stringify({ message: 'Hello from User API' }));
-}
-
-// Create and start the server
-const PORT = 3000;
-const server = http.createServer(requestHandler);
-
-server.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
 
 function sendJSON(res, statusCode, data) {
     res.writeHead(statusCode, { 'Content-Type': 'application/json' });
@@ -45,7 +31,7 @@ function sendJSON(res, statusCode, data) {
     
     if (!user.email) {
       errors.push('Email is required');
-    } else if (!(typeof str === 'string' && str.includes('@'))) {
+    } else if (!(typeof str === 'string')) {
       errors.push('Email is not valid');
     }
     
@@ -98,13 +84,14 @@ function createUser(req, res) {
     });
   }
 
-// GET/{id}
+// GET/{id} one user
 function listUsers(req, res) {
     const allUsers = Array.from(users.values());
     sendJSON(res, STATUS.OK, { count: allUsers.length, users: allUsers });
   }
 
-  function getUser(req, res, id) {
+// GET all users
+function getUser(req, res, id) {
     // Check if valid id and user exists
     if (!(typeof id === 'string' && id.includes('-') && id.length >= 32)) {
         return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
@@ -117,3 +104,109 @@ function listUsers(req, res) {
     // Send back the user
     sendJSON(res, STATUS.OK, user);
   }
+
+function updateUser(req, res, id) {
+    // Check if valid id and user exists
+    if (!(typeof id === 'string' && id.includes('-') && id.length >= 32)) {
+        return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
+    }
+
+    const user = users.get(id);
+    if (!user) {
+      return sendJSON(res, STATUS.NOT_FOUND, { error: 'User not found' });
+    }
+    let body = '';
+    
+    // Collect data chunks
+    req.on('data', chunk => {
+      body += chunk;
+    });
+    // When all data is received
+    req.on('end', () => {
+      // Parse the data
+      const data = body ? JSON.parse(body) : {};
+      
+      // Check if data is valid
+      const errors = validateUser(data);
+      if (errors.length > 0) {
+        return sendJSON(res, STATUS.BAD_REQUEST, { error: 'Validation failed', details: errors });
+      }
+
+      // Update user
+      user.name = data.name.trim();
+      user.email = data.email.toLowerCase();
+      user.age = data.age;
+      user.updatedAt = new Date().toISOString();
+
+      // Send back the updated user
+      sendJSON(res, STATUS.OK, user);
+    });
+    // Update user
+}
+
+// DELETE/{id} one user
+function deleteUser(req, res, id) {
+    // Check if valid id and user exists
+    if (!(typeof id === 'string' && id.includes('-') && id.length >= 32)) {
+        return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
+    }
+    const user = users.get(id);
+    if (!user) {
+      return sendJSON(res, STATUS.NOT_FOUND, { error: 'User not found' });
+    }
+    // Delete user
+    users.delete(id);
+
+    // Send back the deleted user
+    sendJSON(res, STATUS.NO_CONTENT, { message: 'User deleted successfully' });
+}
+
+// ROUTER - Decides which function to call
+function handleRequest(req, res) {
+  const method = req.method;
+  const url = req.url;
+  
+  console.log(`${method} ${url}`);
+  
+  // POST /users - Create user
+  if (method === 'POST' && url === '/users') {
+    return createUser(req, res);
+  }
+  
+  // GET /users - List users
+  if (method === 'GET' && url === '/users') {
+    return listUsers(req, res);
+  }
+  
+  // Check if URL is /users/something
+  if (url.startsWith('/users/')) {
+    const id = url.split('/')[2];  // Extract the ID
+    
+    // GET /users/:id - Get user
+    if (method === 'GET') {
+      return getUser(req, res, id);
+    }
+    
+    // PUT /users/:id - Update user
+    if (method === 'PUT') {
+      return updateUser(req, res, id);
+    }
+    
+    // DELETE /users/:id - Delete user
+    if (method === 'DELETE') {
+      return deleteUser(req, res, id);
+    }
+  }
+  
+  // No route matched
+  sendJSON(res, STATUS.NOT_FOUND, { error: 'Route not found' });
+}
+
+// Create and start the server
+const PORT = 3000;
+const server = http.createServer(handleRequest);
+
+
+server.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});
