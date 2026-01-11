@@ -16,9 +16,7 @@ const pool = new Pool({
   port: 5432,
 });
 
-console.log('Dropping table...');
-
-const dropTable = `DROP TABLE users;`;
+const dropTable = `DROP TABLE IF EXISTS users;`;
 // SQL command to create the users table
 const createTableQuery = `
   CREATE TABLE users (
@@ -33,12 +31,12 @@ const createTableQuery = `
 `;
 async function setup() {
     try {
-        await pool.query(createTableQuery);
-        await pool.query(dropTable);
-        console.log('Table created!');
+      await pool.query(dropTable);  
+      await pool.query(createTableQuery);
+      console.log('Table created!');
     } catch (error) {
-        console.error('Error creating table:', error);
-        throw error;
+      console.error('Error creating table:', error);
+      throw error;
     }
 }
 
