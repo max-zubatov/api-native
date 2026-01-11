@@ -1,8 +1,13 @@
 import http from 'http';
 import crypto from 'crypto';
-import url from 'url';
+import dotenv from 'dotenv';
+import bcrypt from 'bcrypt';
+import { query } from './setup-database.js';
+
+dotenv.config();
 // My users' database
 const users = new Map();
+
 
 // Constants for HTTP status codes
 const STATUS = {
@@ -56,7 +61,7 @@ function createUser(req, res) {
     });
     
     // When all data is received
-    req.on('end', () => {
+    req.on('end', async () => {
       // Parse the data
       const data = body ? JSON.parse(body) : {};
       
@@ -65,57 +70,63 @@ function createUser(req, res) {
       if (errors.length > 0) {
         return sendJSON(res, STATUS.BAD_REQUEST, { error: 'Validation failed', details: errors });
       }
-      
-      // Create new user
       const id = crypto.randomUUID();
-      const user = {
-        id: id,
-        name: data.name.trim(),
-        email: data.email.toLowerCase(),
-        age: data.age,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
-      // Save user
-      users.set(id, user);
+      const passwordHash = await bcrypt.hash(data.password, 10);
+
+      const sql = `
+        INSERT INTO users (id, name, password, email, age, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, name, password, email, age, created_at, updated_at;
+      `;
+
+      const result = await query(sql, [
+        id,
+        data.name.trim(),
+        passwordHash,
+        data.email.toLowerCase(),
+        data.age,
+        new Date().toISOString(),
+        new Date().toISOString()
+      ]);
       
       // Send back the new user
-      sendJSON(res, STATUS.CREATED, user);
+      sendJSON(res, STATUS.CREATED, result.rows[0]);
     });
   }
 
-// GET/{id} one user
-function listUsers(req, res) {
-    const allUsers = Array.from(users.values());
-    sendJSON(res, STATUS.OK, { count: allUsers.length, users: allUsers });
-  }
-
 // GET all users
-function getUser(req, res, id) {
+async function listUsers(req, res) {
+  const sql = 'SELECT id, name, email, age, created_at, updated_at FROM users ORDER BY created_at DESC;';
+  const result = await query(sql);
+  
+  sendJSON(res, STATUS.OK, {
+    count: result.rows.length,
+    users: result.rows
+  });
+}
+
+// GET/{id} one user
+async function getUser(req, res, id) {
     // Check if valid id and user exists
     if (!(typeof id === 'string' && id.includes('-') && id.length >= 32)) {
         return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
     }
-    const user = users.get(id);
-    if (!user) {
+    const sql = `SELECT id, name, email, age, created_at, updated_at FROM users WHERE id = $1;`;
+    const result = await query(sql, [id]);
+    if (!result.rows.length) {
       return sendJSON(res, STATUS.NOT_FOUND, { error: 'User not found' });
     }
     
     // Send back the user
-    sendJSON(res, STATUS.OK, user);
+    sendJSON(res, STATUS.OK, result.rows[0]);
   }
 
-function updateUser(req, res, id) {
+async function updateUser(req, res, id) {
     // Check if valid id and user exists
     if (!(typeof id === 'string' && id.includes('-') && id.length >= 32)) {
         return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
     }
 
-    const user = users.get(id);
-    if (!user) {
-      return sendJSON(res, STATUS.NOT_FOUND, { error: 'User not found' });
-    }
     let body = '';
     
     // Collect data chunks
@@ -123,7 +134,7 @@ function updateUser(req, res, id) {
       body += chunk;
     });
     // When all data is received
-    req.on('end', () => {
+    req.on('end', async () => {
       // Parse the data
       const data = body ? JSON.parse(body) : {};
       
@@ -132,38 +143,52 @@ function updateUser(req, res, id) {
         return sendJSON(res, STATUS.BAD_REQUEST, { error: 'Validation failed', details: 'No data provided' });
       }
 
+      let updates = [];
+      let values = [];
+      let index = 1;
       // Update user
       if (data.name) {
-        user.name = data.name.trim();
+        updates.push(`name = $${index}`);
+        values.push(data.name.trim());
+        index++;
       }
       if (data.email) {
-        user.email = data.email.toLowerCase();
+        updates.push(`email = $${index}`);
+        values.push(data.email.toLowerCase());
+        index++;
       }
       if (data.age) {
-        user.age = data.age;
+        updates.push(`age = $${index}`);
+        values.push(data.age);
+        index++;
       }
-      user.updatedAt = new Date().toISOString();
+      updates.push(`updated_at = $${index}`);
+      values.push(new Date().toISOString());
+      index++;
+      values.push(id);
+      sql = `UPDATE users SET ${updates.join(', ')} WHERE id = $${index} RETURNING id, name, email, age, created_at, updated_at;`;
+      const result = await query(sql, values);
+      if (!result.rows.length) {
+        return sendJSON(res, STATUS.NOT_FOUND, { error: 'User not found' });
+      }
       // Send back the updated user
-      sendJSON(res, STATUS.OK, user);
+      sendJSON(res, STATUS.OK, result.rows[0]);
     });
-    // Update user
 }
 
 // DELETE/{id} one user
-function deleteUser(req, res, id) {
+async function deleteUser(req, res, id) {
     // Check if valid id and user exists
     if (!(typeof id === 'string' && id.includes('-') && id.length >= 32)) {
         return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
     }
-    const user = users.get(id);
-    if (!user) {
+    const sql = `DELETE FROM users WHERE id = $1 RETURNING id, name, email, age, created_at, updated_at;`;
+    const result = await query(sql, [id]);
+    if (!result.rows.length) {
       return sendJSON(res, STATUS.NOT_FOUND, { error: 'User not found' });
     }
-    // Delete user
-    users.delete(id);
-
     // Send back the deleted user
-    sendJSON(res, STATUS.NO_CONTENT, { message: 'User deleted successfully' });
+    sendJSON(res, STATUS.NO_CONTENT, result.rows[0]);
 }
 
 // ROUTER - Decides which function to call
@@ -215,3 +240,4 @@ const server = http.createServer(handleRequest);
 server.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
+
