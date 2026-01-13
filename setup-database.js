@@ -1,22 +1,23 @@
 import { Pool } from 'pg';
-import dotenv from 'dotenv';
+import dotenv from 'dotenv'; // remove dotenv and use --env-file
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+dirname(__filename);
 
 dotenv.config();
 
 const pool = new Pool({
-  user: 'myuser',
+  user: 'myuser', // replace with env vars
+  password: 'mypassword',
   host: 'localhost',
   database: 'mydatabase',
-  password: 'mypassword',
   port: 5432,
 });
 
-const dropTable = `DROP TABLE IF EXISTS users;`;
+const dropTable = `DROP TABLE IF EXISTS users;`; // remove
+
 // SQL command to create the users table
 const createTableQuery = `
   CREATE TABLE users (
@@ -28,38 +29,42 @@ const createTableQuery = `
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
-`;
+`; // remove and use DB manager to create and manage db resource
+
 async function setup() {
-    try {
-      await pool.query(dropTable);  
-      await pool.query(createTableQuery);
-      console.log('Table created!');
-    } catch (error) {
-      console.error('Error creating table:', error);
-      throw error;
-    }
+  // remove
+  try {
+    await pool.query(dropTable); // remove
+    await pool.query(createTableQuery); // remove
+    console.log('Table created!');
+  } catch (error) {
+    console.error('Error creating table:', error);
+    throw error;
+  }
 }
 
 // Only run setup if this file is executed directly (not imported)
-const isMainModule = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+const isMainModule =
+  process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 
+// remove below
 if (isMainModule) {
-    setup().then(() => {
-        pool.end();
-        process.exit(0);
-    }).catch((error) => {
-        console.error('Setup failed:', error);
-        pool.end();
-        process.exit(1);
+  setup()
+    .then(() => {
+      pool.end();
+      process.exit(0);
+    })
+    .catch(error => {
+      console.error('Setup failed:', error);
+      pool.end();
+      process.exit(1);
     });
 }
 
-// Export setup function so it can be called from index.js if needed
+// remove
 export { setup };
 
 export async function query(text, params) {
-    const result = await pool.query(text, params);
-    return result;
+  const result = await pool.query(text, params);
+  return result;
 }
-  
-export default pool;
