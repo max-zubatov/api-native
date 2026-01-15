@@ -1,22 +1,9 @@
 import http from 'http';
 import crypto from 'crypto';
-import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
-import { query } from './setup-database';
-
-// move to separate file
-const STATUS = {
-  OK: 200,
-  CREATED: 201,
-  NO_CONTENT: 204,
-  BAD_REQUEST: 400,
-  NOT_FOUND: 404,
-  INTERNAL_SERVER_ERROR: 500,
-};
-
-dotenv.config();
-// My users' database
-const users = new Map();
+import { query } from './setup-database.js';
+import { STATUS } from './config.js';
+import { EMAIL_REGEX, UUID_REGEX } from './validations.js';
 
 function sendJSON(res, statusCode, data) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json' });
@@ -29,20 +16,20 @@ function validateUser(user) {
   // move to separate file
   const errors = [];
 
-  if (!user.name || user.name.trim() === '') {
+  if (!user.name || !user.name.trim()) {
     // use the same negation style
     errors.push('Name is required');
   }
 
   if (!user.email) {
     errors.push('Email is required');
-  } else if (!(typeof user.email === 'string' && user.email.includes('@'))) {
-    // use RegExp
+    
+  } else if (!EMAIL_REGEX.test(user.email)) {
     errors.push('Email is not valid');
   }
 
   // use negation
-  if (user.age === undefined) {
+  if (!user.age) {
     errors.push('Age is required');
   } else if (typeof user.age !== 'number') {
     errors.push();
@@ -114,8 +101,7 @@ async function listUsers(req, res) {
 // GET/{id} one user
 async function getUser(req, res, id) {
   // Check if id valid and user exists
-  // Replace and use RegExp to validate if id is UUID v4
-  if (!(typeof id === 'string' && id.includes('-') && id.length >= 32)) {
+  if (!UUID_REGEX.test(id)) {
     return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
   }
   const sql = `SELECT id, name, email, age, created_at, updated_at FROM users WHERE id = $1;`;
@@ -131,8 +117,7 @@ async function getUser(req, res, id) {
 
 async function updateUser(req, res, id) {
   // Check if id valid and user exists
-  // Replace and use RegExp to validate if id is UUID v4
-  if (!(typeof id === 'string' && id.includes('-') && id.length >= 32)) {
+  if (!UUID_REGEX.test(id)) {
     return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
   }
 
@@ -195,8 +180,7 @@ async function updateUser(req, res, id) {
 // DELETE/{id} one user
 async function deleteUser(req, res, id) {
   // Check if id valid and user exists
-  // Replace and use RegExp to validate if id is UUID v4
-  if (!(typeof id === 'string' && id.includes('-') && id.length >= 32)) {
+  if (!UUID_REGEX.test(id)) {
     return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
   }
   const sql = `DELETE FROM users WHERE id = $1 RETURNING id, name, email, age, created_at, updated_at;`;
