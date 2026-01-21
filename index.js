@@ -10,10 +10,8 @@ function sendJSON(res, statusCode, data) {
   res.end(JSON.stringify(data));
 }
 
-//STEP 2: VALIDATION FUNCTIONS
 // Check if user data is valid
 function validateUser(user) {
-  // move to separate file
   const errors = [];
 
   if (!user.name || !user.name.trim()) {
@@ -102,7 +100,7 @@ async function listUsers(req, res) {
 async function getUser(req, res, id) {
   // Check if id valid and user exists
   if (!UUID_REGEX.test(id)) {
-    return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
+    return sendJSON(res, STATUS.BAD_REQUEST, { error: 'Invalid ID' });
   }
   const sql = `SELECT id, name, email, age, created_at, updated_at FROM users WHERE id = $1;`;
   const result = await query(sql, [id]);
@@ -118,7 +116,7 @@ async function getUser(req, res, id) {
 async function updateUser(req, res, id) {
   // Check if id valid and user exists
   if (!UUID_REGEX.test(id)) {
-    return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
+    return sendJSON(res, STATUS.BAD_REQUEST, { error: 'Invalid ID' });
   }
 
   let body = '';
@@ -133,7 +131,7 @@ async function updateUser(req, res, id) {
     const data = body ? JSON.parse(body) : {};
 
     // Check if data is valid
-    if (data == {}) {
+    if (Object.keys(data).length === 0) {
       return sendJSON(res, STATUS.BAD_REQUEST, {
         error: 'Validation failed',
         details: 'No data provided',
