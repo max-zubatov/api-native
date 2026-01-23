@@ -15,13 +15,15 @@ function validateUser(user) {
   const errors = [];
 
   if (!user.name || !user.name.trim()) {
-    // use the same negation style
     errors.push('Name is required');
+  }
+
+  if (!user.password || !user.password.trim()) {
+    errors.push('Password is required');
   }
 
   if (!user.email) {
     errors.push('Email is required');
-    
   } else if (!EMAIL_REGEX.test(user.email)) {
     errors.push('Email is not valid');
   }
@@ -30,14 +32,19 @@ function validateUser(user) {
   if (!user.age) {
     errors.push('Age is required');
   } else if (typeof user.age !== 'number') {
-    errors.push();
+    errors.push('Age must be a number');
   } else if (user.age < 0 || user.age > 150) {
     errors.push('Age must be a number between 0 and 150');
   }
 
   return errors;
 }
-
+// Check if the email is already in the database
+async function checkEmailExists(email) {
+  const emailCheckSql = 'SELECT id FROM users WHERE email = $1;';
+  const emailCheckResult = await query(emailCheckSql, [email.toLowerCase()]);
+  return emailCheckResult.rows.length > 0;
+}
 //POST
 function createUser(req, res) {
   let body = '';
@@ -60,13 +67,22 @@ function createUser(req, res) {
         details: errors,
       });
     }
+    // Check if the email is already in the database
+    const emailExists = await checkEmailExists(data.email);
+    if (emailExists) {
+      return sendJSON(res, STATUS.BAD_REQUEST, {
+        error: 'Email already exists',
+        details: 'The email is already in use',
+      });
+    }
+
     const id = crypto.randomUUID();
     const passwordHash = await bcrypt.hash(data.password, 10);
 
     const sql = `
         INSERT INTO users (id, name, password, email, age, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING id, name, password, email, age, created_at, updated_at;
+        RETURNING id, name, email, age, created_at, updated_at;
       `;
 
     const result = await query(sql, [
