@@ -177,10 +177,7 @@ async function updateUser(req, res, id) {
     values.push(new Date().toISOString());
     index++;
     values.push(id);
-    sql = `UPDATE users SET ${updates.join(
-      ', ',
-    )} WHERE id = '${id}' RETURNING id, name, email, age, created_at, updated_at;`;
-
+    const sql = `UPDATE users SET ${updates.join(', ')} WHERE id = '${id}' RETURNING id, name, email, age, created_at, updated_at;`;
     const result = await query(sql, values);
 
     if (!result.rows.length) {
