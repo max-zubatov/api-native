@@ -1,0 +1,22 @@
+{
+  "env": {
+    "node": true,
+    "es2021": true
+  },
+  "extends": ["eslint:recommended", "plugin:prettier/recommended"],
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module"
+  },
+  "rules": {
+    "no-unused-vars": "warn",          // Warn about unused variables
+    "no-console": "off",                // Allow console.log
+    "prettier/prettier": "error",       // Prettier violations are errors
+    "no-var": "error",                  // Force const/let instead of var
+    "prefer-const": "warn",             // Suggest const when variable isn't reassigned
+    "no-debugger": "error",             // Don't allow debugger statements
+    "eqeqeq": "error",                  // Force === instead of ==
+    "curly": "error",                   // Require curly braces in if statements
+    "no-multiple-empty-lines": ["error", { "max": 1 }]  // Max 1 empty line
+  }
+}
