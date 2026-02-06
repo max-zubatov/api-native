@@ -1,0 +1,16 @@
+node_modules/
+postgres_data/
+.env
+logs
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+coverage/
+dist/
+build/

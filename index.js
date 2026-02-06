@@ -1,58 +1,50 @@
 import http from 'http';
 import crypto from 'crypto';
-import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
-import { query } from './setup-database';
-
-// move to separate file
-const STATUS = {
-  OK: 200,
-  CREATED: 201,
-  NO_CONTENT: 204,
-  BAD_REQUEST: 400,
-  NOT_FOUND: 404,
-  INTERNAL_SERVER_ERROR: 500,
-};
-
-dotenv.config();
-// My users' database
-const users = new Map();
+import { query } from './setup-database.js';
+import { STATUS } from './config.js';
+import { EMAIL_REGEX, UUID_REGEX } from './validations.js';
 
 function sendJSON(res, statusCode, data) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
 }
 
-//STEP 2: VALIDATION FUNCTIONS
 // Check if user data is valid
 function validateUser(user) {
-  // move to separate file
   const errors = [];
 
-  if (!user.name || user.name.trim() === '') {
-    // use the same negation style
+  if (!user.name || !user.name.trim()) {
     errors.push('Name is required');
+  }
+
+  if (!user.password || !user.password.trim()) {
+    errors.push('Password is required');
   }
 
   if (!user.email) {
     errors.push('Email is required');
-  } else if (!(typeof user.email === 'string' && user.email.includes('@'))) {
-    // use RegExp
+  } else if (!EMAIL_REGEX.test(user.email)) {
     errors.push('Email is not valid');
   }
 
   // use negation
-  if (user.age === undefined) {
+  if (!user.age) {
     errors.push('Age is required');
   } else if (typeof user.age !== 'number') {
-    errors.push();
+    errors.push('Age must be a number');
   } else if (user.age < 0 || user.age > 150) {
     errors.push('Age must be a number between 0 and 150');
   }
 
   return errors;
 }
-
+// Check if the email is already in the database
+async function checkEmailExists(email) {
+  const emailCheckSql = 'SELECT id FROM users WHERE email = $1;';
+  const emailCheckResult = await query(emailCheckSql, [email.toLowerCase()]);
+  return emailCheckResult.rows.length > 0;
+}
 //POST
 function createUser(req, res) {
   let body = '';
@@ -75,13 +67,22 @@ function createUser(req, res) {
         details: errors,
       });
     }
+    // Check if the email is already in the database
+    const emailExists = await checkEmailExists(data.email);
+    if (emailExists) {
+      return sendJSON(res, STATUS.BAD_REQUEST, {
+        error: 'Email already exists',
+        details: 'The email is already in use',
+      });
+    }
+
     const id = crypto.randomUUID();
     const passwordHash = await bcrypt.hash(data.password, 10);
 
     const sql = `
         INSERT INTO users (id, name, password, email, age, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING id, name, password, email, age, created_at, updated_at;
+        RETURNING id, name, email, age, created_at, updated_at;
       `;
 
     const result = await query(sql, [
@@ -114,9 +115,8 @@ async function listUsers(req, res) {
 // GET/{id} one user
 async function getUser(req, res, id) {
   // Check if id valid and user exists
-  // Replace and use RegExp to validate if id is UUID v4
-  if (!(typeof id === 'string' && id.includes('-') && id.length >= 32)) {
-    return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
+  if (!UUID_REGEX.test(id)) {
+    return sendJSON(res, STATUS.BAD_REQUEST, { error: 'Invalid ID' });
   }
   const sql = `SELECT id, name, email, age, created_at, updated_at FROM users WHERE id = $1;`;
   const result = await query(sql, [id]);
@@ -131,9 +131,8 @@ async function getUser(req, res, id) {
 
 async function updateUser(req, res, id) {
   // Check if id valid and user exists
-  // Replace and use RegExp to validate if id is UUID v4
-  if (!(typeof id === 'string' && id.includes('-') && id.length >= 32)) {
-    return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
+  if (!UUID_REGEX.test(id)) {
+    return sendJSON(res, STATUS.BAD_REQUEST, { error: 'Invalid ID' });
   }
 
   let body = '';
@@ -148,7 +147,7 @@ async function updateUser(req, res, id) {
     const data = body ? JSON.parse(body) : {};
 
     // Check if data is valid
-    if (data == {}) {
+    if (Object.keys(data).length === 0) {
       return sendJSON(res, STATUS.BAD_REQUEST, {
         error: 'Validation failed',
         details: 'No data provided',
@@ -178,10 +177,7 @@ async function updateUser(req, res, id) {
     values.push(new Date().toISOString());
     index++;
     values.push(id);
-    sql = `UPDATE users SET ${updates.join(
-      ', ',
-    )} WHERE id = '${id}' RETURNING id, name, email, age, created_at, updated_at;`;
-
+    const sql = `UPDATE users SET ${updates.join(', ')} WHERE id = '${id}' RETURNING id, name, email, age, created_at, updated_at;`;
     const result = await query(sql, values);
 
     if (!result.rows.length) {
@@ -195,8 +191,7 @@ async function updateUser(req, res, id) {
 // DELETE/{id} one user
 async function deleteUser(req, res, id) {
   // Check if id valid and user exists
-  // Replace and use RegExp to validate if id is UUID v4
-  if (!(typeof id === 'string' && id.includes('-') && id.length >= 32)) {
+  if (!UUID_REGEX.test(id)) {
     return sendJSON(res, STATUS.NOT_FOUND, { error: 'Invalid ID' });
   }
   const sql = `DELETE FROM users WHERE id = $1 RETURNING id, name, email, age, created_at, updated_at;`;
