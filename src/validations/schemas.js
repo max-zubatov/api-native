@@ -29,6 +29,7 @@ export const reactionSchema = z.object({
     deletedAt: z.date().nullable(),
     type: z.enum(['like', 'dislike']),
     thinkerId: z.uuid(),
+    thoughtId: z.uuid(),
 });
 
 export const signUpSchema = z.object({

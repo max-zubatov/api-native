@@ -4,6 +4,7 @@ import { usersTable } from '../db/schemas/user-schema.js';
 import { reactionsTable } from '../db/schemas/reactions-schema.js';
 import 'dotenv/config';
 import { and, eq, isNull, sql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 
 const db = drizzle(process.env.DATABASE_URL);
 
@@ -12,11 +13,19 @@ export const createThought = async (req, res, next) => {
   if (req.user?.type !== 'thinker') {
     return res.status(403).json({ error: 'Only thinkers can create thoughts' });
   }
+  const id = randomUUID();
   try {
     const [thought] = await db
       .insert(thoughtsTable)
-      .values({ title, content, userId: req.user.userId })
-      .returning();
+      .values({ id, title, content, userId: req.user.userId })
+      .returning({
+        id: thoughtsTable.id,
+        title: thoughtsTable.title,
+        content: thoughtsTable.content,
+        userId: thoughtsTable.userId,
+        createdAt: thoughtsTable.createdAt,
+        updatedAt: thoughtsTable.updatedAt,
+      });
     res.status(201).json(thought);
   } catch (error) {
     next(error);
@@ -24,7 +33,7 @@ export const createThought = async (req, res, next) => {
 };
 
 export const deleteThought = async (req, res, next) => {
-  const thoughtId = parseInt(req.params.id, 10);
+  const thoughtId = req.params.id;
   const { type, userId } = req.user;
 
   try {
@@ -52,7 +61,7 @@ export const deleteThought = async (req, res, next) => {
 };
 
 export const getThought = async (req, res, next) => {
-  const thoughtId = parseInt(req.params.id, 10);
+  const thoughtId = req.params.id;
   try {
     // thoughts → users (owner) → reactions (aggregate likes / dislikes)
     const [row] = await db
@@ -108,7 +117,7 @@ export const updateThought = async (req, res, next) => {
   const { id } = req.params;
   const { title, content } = req.body;
   try {
-    const thoughtId = parseInt(id, 10);
+    const thoughtId = id;
     const [thought] = await db
       .update(thoughtsTable)
       .set({ title, content })
@@ -124,11 +133,14 @@ export const updateThought = async (req, res, next) => {
 };
 
 export const reactToThought = async (req, res, next) => {
-  const { id } = req.params;
+  const thoughtId = req.params.id;
   const { type } = req.body;
   try {
-    const thoughtId = parseInt(id, 10);
-    const [reaction] = await db.insert(reactionsTable).values({ thoughtId, type, userId: req.user.userId }).returning();
+    const id = randomUUID();
+    const [reaction] = await db
+      .insert(reactionsTable)
+      .values({ id, thoughtId, type, thinkerId: req.user.userId })
+      .returning();
     if (!reaction) {
       return res.status(404).json({ error: 'Thought not found' });
     }

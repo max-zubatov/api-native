@@ -5,6 +5,7 @@ import 'dotenv/config';
 import bcrypt from 'bcrypt';
 import { signUpSchema, setPasswordSchema } from '../validations/schemas.js';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'node:crypto';
 
 const db = drizzle(process.env.DATABASE_URL);
 
@@ -15,14 +16,14 @@ export const signUp = async (req, res, next) => {
     if (!validation.success) {
       return res.status(400).json({ error: validation.error.message });
     }
-
-    // Insert new thinker (password set to empty string since it's required but not available)
+    const id = randomUUID();
     const [newUser] = await db
       .insert(usersTable)
       .values({
+        id,
         name: name.trim(),
         nickname: nickname.trim(),
-        age,
+        age: age,
         email: email.toLowerCase(),
         password: '', // Password not available for sign-up
         type: 'thinker',

@@ -9,6 +9,6 @@ export const usersTable = p.pgTable('users', {
   nickname: p.varchar({ length: 255 }).notNull(),
   age: p.integer().notNull(),
   email: p.varchar({ length: 255 }).notNull().unique(),
-  password: p.varchar({ length: 255 }).notNull().min(8),
-  type: p.varchar({ length: 8, enum: ['admin', 'thinker'] }).notNull(),
+  password: p.varchar({ length: 255 }).notNull(),
+  type: p.varchar({ enum: ['admin', 'thinker'] }).notNull(),
 });

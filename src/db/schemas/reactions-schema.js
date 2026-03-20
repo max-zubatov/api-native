@@ -6,12 +6,6 @@ import { utilCommonFields } from './util/common-fields.js';
 export const reactionsTable = p.pgTable('reactions', {
   ...utilCommonFields,
   type: p.varchar({ length: 8, enum: ['like', 'dislike'] }).notNull(),
-  thinkerId: p
-    .integer()
-    .references(() => usersTable.id)
-    .notNull(),
-  thoughtId: p
-    .integer()
-    .references(() => thoughtsTable.id)
-    .notNull(),
+  thinkerId: p.uuid().references(() => usersTable.id).notNull(),
+  thoughtId: p.uuid().references(() => thoughtsTable.id).notNull(),
 });

@@ -5,6 +5,7 @@ import { signUpSchema } from '../validations/schemas.js';
 import { and, eq, isNull } from 'drizzle-orm';
 import { thoughtsTable } from '../db/schemas/thoughts-schema.js';
 import { reactionsTable } from '../db/schemas/reactions-schema.js';
+import { randomUUID } from 'node:crypto';
 
 const db = drizzle(process.env.DATABASE_URL);
 
@@ -14,13 +15,12 @@ export const createUser = async (req, res, next) => {
   if (!validation.success) {
     return res.status(400).json({ error: validation.error.message });
   }
-  if (req.user?.type !== 'admin') {
-    return res.status(403).json({ error: 'You are not authorized to create a user' });
-  }
+  const id = randomUUID();
   try {
     const [inserted] = await db
       .insert(usersTable)
       .values({
+        id,
         name: name.trim(),
         nickname: nickname.trim(),
         age,
@@ -37,14 +37,11 @@ export const createUser = async (req, res, next) => {
 
 export const deleteUser = async (req, res, next) => {
   const { id } = req.params;
-  if (req.user?.type !== 'admin') {
-    return res.status(403).json({ error: 'You are not authorized to delete a user' });
-  }
   try {
     await db
       .update(usersTable)
       .set({ deletedAt: new Date() })
-      .where(eq(usersTable.id, parseInt(id, 10)))
+      .where(eq(usersTable.id, id))
       .returning();
     res.status(204).send();
   } catch (error) {
@@ -53,7 +50,7 @@ export const deleteUser = async (req, res, next) => {
 };
 
 export const getUser = async (req, res, next) => {
-  const userId = parseInt(req.params.id, 10);
+  const userId = req.params.id;
   const activeUser = and(eq(usersTable.id, userId), isNull(usersTable.deletedAt));
   const activeThought = isNull(thoughtsTable.deletedAt);
 
@@ -96,7 +93,7 @@ export const getUsers = async (req, res, next) => {
 export const updateUser = async (req, res, next) => {
   const { id } = req.params;
   const { name, nickname, age, email } = req.body;
-  const userId = parseInt(id, 10);
+  const userId = id;
   try {
     const rows = await db.select().from(usersTable).where(eq(usersTable.id, userId));
     const existing = rows[0];
