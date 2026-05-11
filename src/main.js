@@ -1,5 +1,6 @@
+import { env } from './config/env.js';
 import express from 'express';
-import 'dotenv/config';
+import { HTTP_STATUS } from './enum/http-status.enum.js';
 import {
   jwtVerification,
   requireAdmin,
@@ -26,16 +27,16 @@ app.post('/thoughts', jwtVerification, requireThinker, thoughts.createThought);
 app.get('/thoughts', jwtVerification, thoughts.getThoughts);
 app.get('/thoughts/:id', jwtVerification, thoughts.getThought);
 app.put('/thoughts/:id', jwtVerification, requireAdmin, thoughts.updateThought);
-app.post('/thoughts/:id/react', jwtVerification, thoughts.reactToThought);
+app.post('/thoughts/:id/react', jwtVerification, requireThinker, thoughts.reactToThought);
 app.delete('/thoughts/:id', jwtVerification, thoughts.deleteThought);
 
-// Express requires 4 args to treat this as an error handler
-// eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
+  res.status(err.status || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+    error: err.message || 'Internal Server Error',
+  });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = env.PORT;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });

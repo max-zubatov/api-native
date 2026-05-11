@@ -1,23 +1,23 @@
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { HTTP_STATUS } from '../enum/http-status.enum.js';
 import { thoughtsTable } from '../db/schemas/thoughts-schema.js';
 import { usersTable } from '../db/schemas/user-schema.js';
 import { reactionsTable } from '../db/schemas/reactions-schema.js';
-import 'dotenv/config';
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { randomUUID } from 'node:crypto';
-
-const db = drizzle(process.env.DATABASE_URL);
+import { reactionSchema, thoughtSchema, updateThoughtSchema } from '../validations/schemas.js';
+import { db } from '../db/schemas/db.js';
 
 export const createThought = async (req, res, next) => {
   const { title, content } = req.body;
-  if (req.user?.type !== 'thinker') {
-    return res.status(403).json({ error: 'Only thinkers can create thoughts' });
+  const validation = thoughtSchema.safeParse({ title, content });
+  if (!validation.success) {
+    return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: validation.error.message });
   }
-  const id = randomUUID();
+  // userId always comes from the verified JWT – never trust the request body
+  const userId = req.user.userId;
   try {
     const [thought] = await db
       .insert(thoughtsTable)
-      .values({ id, title, content, userId: req.user.userId })
+      .values({ title, content, userId })
       .returning({
         id: thoughtsTable.id,
         title: thoughtsTable.title,
@@ -26,7 +26,7 @@ export const createThought = async (req, res, next) => {
         createdAt: thoughtsTable.createdAt,
         updatedAt: thoughtsTable.updatedAt,
       });
-    res.status(201).json(thought);
+    res.status(HTTP_STATUS.CREATED).json(thought);
   } catch (error) {
     next(error);
   }
@@ -37,24 +37,25 @@ export const deleteThought = async (req, res, next) => {
   const { type, userId } = req.user;
 
   try {
-    const [thought] = await db.select().from(thoughtsTable).where(eq(thoughtsTable.id, thoughtId));
-    if (!thought || thought.deletedAt) {
-      return res.status(404).json({ error: 'Thought not found' });
-    }
+    const whereClause =
+      type === 'admin'
+        ? and(eq(thoughtsTable.id, thoughtId), isNull(thoughtsTable.deletedAt))
+        : and(
+            eq(thoughtsTable.id, thoughtId),
+            eq(thoughtsTable.userId, userId),
+            isNull(thoughtsTable.deletedAt)
+          );
+
     const [updated] = await db
       .update(thoughtsTable)
       .set({ deletedAt: new Date() })
-      .where(
-        type === 'admin'
-          ? eq(thoughtsTable.id, thoughtId)
-          : and(eq(thoughtsTable.id, thoughtId), eq(thoughtsTable.userId, userId))
-      )
+      .where(whereClause)
       .returning();
 
     if (!updated) {
-      return res.status(404).json({ error: 'Thought not found' });
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Thought not found' });
     }
-    res.status(204).send();
+    res.status(HTTP_STATUS.NO_CONTENT).send();
   } catch (error) {
     next(error);
   }
@@ -63,7 +64,6 @@ export const deleteThought = async (req, res, next) => {
 export const getThought = async (req, res, next) => {
   const thoughtId = req.params.id;
   try {
-    // thoughts → users (owner) → reactions (aggregate likes / dislikes)
     const [row] = await db
       .select({
         thought: thoughtsTable,
@@ -90,10 +90,10 @@ export const getThought = async (req, res, next) => {
       .groupBy(thoughtsTable.id, usersTable.id);
 
     if (!row) {
-      return res.status(404).json({ error: 'Thought not found' });
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Thought not found' });
     }
 
-    res.status(200).json({
+    res.status(HTTP_STATUS.OK).json({
       thought: row.thought,
       owner: row.owner,
       likesCount: row.likesCount,
@@ -106,8 +106,12 @@ export const getThought = async (req, res, next) => {
 
 export const getThoughts = async (req, res, next) => {
   try {
-    const thoughts = await db.select().from(thoughtsTable);
-    res.status(200).json(thoughts);
+    // Only return non-deleted thoughts
+    const thoughts = await db
+      .select()
+      .from(thoughtsTable)
+      .where(isNull(thoughtsTable.deletedAt));
+    res.status(HTTP_STATUS.OK).json(thoughts);
   } catch (error) {
     next(error);
   }
@@ -116,17 +120,24 @@ export const getThoughts = async (req, res, next) => {
 export const updateThought = async (req, res, next) => {
   const { id } = req.params;
   const { title, content } = req.body;
+  const validation = updateThoughtSchema.safeParse({ title, content });
+  if (!validation.success) {
+    return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: validation.error.message });
+  }
   try {
-    const thoughtId = id;
+    const updates = {};
+    if (title !== undefined) updates.title = title;
+    if (content !== undefined) updates.content = content;
+
     const [thought] = await db
       .update(thoughtsTable)
-      .set({ title, content })
-      .where(and(eq(thoughtsTable.id, thoughtId), isNull(thoughtsTable.deletedAt)))
+      .set(updates)
+      .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)))
       .returning();
     if (!thought) {
-      return res.status(404).json({ error: 'Thought not found' });
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Thought not found' });
     }
-    res.status(200).json(thought);
+    res.status(HTTP_STATUS.OK).json(thought);
   } catch (error) {
     next(error);
   }
@@ -134,17 +145,40 @@ export const updateThought = async (req, res, next) => {
 
 export const reactToThought = async (req, res, next) => {
   const thoughtId = req.params.id;
+  // Extract from body BEFORE validation so the schema can check it
   const { type } = req.body;
+  const validation = reactionSchema.safeParse({ type });
+  if (!validation.success) {
+    return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: validation.error.message });
+  }
+  const thinkerId = req.user.userId;
   try {
-    const id = randomUUID();
-    const [reaction] = await db
-      .insert(reactionsTable)
-      .values({ id, thoughtId, type, thinkerId: req.user.userId })
-      .returning();
-    if (!reaction) {
-      return res.status(404).json({ error: 'Thought not found' });
+    // Upsert: if the thinker already reacted to this thought, update the type
+    const existing = await db
+      .select()
+      .from(reactionsTable)
+      .where(
+        and(eq(reactionsTable.thoughtId, thoughtId), eq(reactionsTable.thinkerId, thinkerId))
+      )
+      .limit(1);
+
+    let reaction;
+    if (existing.length > 0) {
+      [reaction] = await db
+        .update(reactionsTable)
+        .set({ type })
+        .where(
+          and(eq(reactionsTable.thoughtId, thoughtId), eq(reactionsTable.thinkerId, thinkerId))
+        )
+        .returning();
+    } else {
+      [reaction] = await db
+        .insert(reactionsTable)
+        .values({ thoughtId, type, thinkerId })
+        .returning();
     }
-    res.status(201).json(reaction);
+
+    res.status(HTTP_STATUS.CREATED).json(reaction);
   } catch (error) {
     next(error);
   }

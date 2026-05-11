@@ -6,7 +6,7 @@ export const usersTable = p.pgTable('users', {
   ...utilCommonFields,
   ...utilSoftDeleteFields,
   name: p.varchar({ length: 255 }).notNull(),
-  nickname: p.varchar({ length: 255 }).notNull(),
+  nickname: p.varchar({ length: 255 }).notNull().unique(),
   age: p.integer().notNull(),
   email: p.varchar({ length: 255 }).notNull().unique(),
   password: p.varchar({ length: 255 }).notNull(),

@@ -1,20 +1,19 @@
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { HTTP_STATUS } from '../enum/http-status.enum.js';
 import { usersTable } from '../db/schemas/user-schema.js';
 import { eq } from 'drizzle-orm';
-import 'dotenv/config';
 import bcrypt from 'bcrypt';
-import { signUpSchema, setPasswordSchema } from '../validations/schemas.js';
+import { env } from '../config/env.js';
+import { signUpSchema, setPasswordSchema, loginSchema } from '../validations/schemas.js';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
-
-const db = drizzle(process.env.DATABASE_URL);
+import { db } from '../db/schemas/db.js';
 
 export const signUp = async (req, res, next) => {
   try {
     const { name, nickname, age, email } = req.body;
     const validation = signUpSchema.safeParse({ name, nickname, age, email });
     if (!validation.success) {
-      return res.status(400).json({ error: validation.error.message });
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: validation.error.message });
     }
     const id = randomUUID();
     const [newUser] = await db
@@ -25,7 +24,7 @@ export const signUp = async (req, res, next) => {
         nickname: nickname.trim(),
         age: age,
         email: email.toLowerCase(),
-        password: '', // Password not available for sign-up
+        password: '',
         type: 'thinker',
       })
       .returning({
@@ -39,7 +38,7 @@ export const signUp = async (req, res, next) => {
         updatedAt: usersTable.updatedAt,
       });
 
-    res.status(201).json(newUser);
+    res.status(HTTP_STATUS.CREATED).json(newUser);
   } catch (error) {
     next(error);
   }
@@ -50,7 +49,7 @@ export const setPassword = async (req, res, next) => {
     const { email, password, passwordConfirmation } = req.body;
     const validation = setPasswordSchema.safeParse({ email, password, passwordConfirmation });
     if (!validation.success) {
-      return res.status(400).json({ error: validation.error.message });
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: validation.error.message });
     }
     const hashedPassword = await bcrypt.hash(password, 10);
     const [updatedUser] = await db
@@ -68,7 +67,7 @@ export const setPassword = async (req, res, next) => {
         updatedAt: usersTable.updatedAt,
       });
 
-    res.status(200).json(updatedUser);
+    res.status(HTTP_STATUS.OK).json(updatedUser);
   } catch (error) {
     return next(new Error('Failed to set password'));
   }
@@ -77,8 +76,9 @@ export const setPassword = async (req, res, next) => {
 export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    const loginValidation = loginSchema.safeParse({ email, password });
+    if (!loginValidation.success) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ error: loginValidation.error.message });
     }
     const user = await db
       .select()
@@ -86,14 +86,22 @@ export const login = async (req, res, next) => {
       .where(eq(usersTable.email, email.toLowerCase()))
       .limit(1);
     if (user.length === 0) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(HTTP_STATUS.UNAUTHORIZED).json({ error: 'Invalid email or password' });
+    }
+    // Users who have never called /set-password have an empty password hash
+    if (!user[0].password) {
+      return res
+        .status(HTTP_STATUS.UNAUTHORIZED)
+        .json({ error: 'Password not set. Please set your password via /set-password first.' });
     }
     const isPasswordValid = await bcrypt.compare(password, user[0].password);
     if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(HTTP_STATUS.UNAUTHORIZED).json({ error: 'Invalid email or password' });
     }
-    const token = jwt.sign({ userId: user[0].id, type: user[0].type }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.status(200).json({ token });
+    const token = jwt.sign({ userId: user[0].id, type: user[0].type }, env.JWT_SECRET, {
+      expiresIn: '1h',
+    });
+    res.status(HTTP_STATUS.OK).json({ token });
   } catch (error) {
     return next(new Error('Failed to login'));
   }
